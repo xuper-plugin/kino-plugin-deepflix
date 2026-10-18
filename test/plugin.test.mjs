@@ -11,18 +11,22 @@ let respond = () => ({ streams: [] });
 const tmdbCalls = [];
 let tmdbImpl = async () => ({ results: [] });
 let metaImpl = async () => null;
+let slept = [];
+let logs = [];
 globalThis.kino = {
   lang: "es",
   config: { get: (k) => config[k] },
   fetch: async (url) => { calls.push(url); const body = respond(url); return { ok: true, status: 200, json: () => body }; },
   storage: { get: () => null, set() {}, keys: () => [], remove() {} },
   tmdb: async (path, params) => { tmdbCalls.push({ path, params }); return tmdbImpl(path, params); },
+  sleep: async (ms) => { slept.push(ms); },
+  log: (...a) => logs.push(a.join(" ")),
   meta: (q) => metaImpl(q), rank: {},
   error: (code, message, opts = {}) => Object.assign(new Error(message), { code, ...opts }),
 };
 const plugin = await import("../plugin.js");
 
-beforeEach(() => { calls.length = 0; tmdbCalls.length = 0; config = {}; respond = () => ({ streams: [] }); tmdbImpl = async () => ({ results: [] }); metaImpl = async () => null; });
+beforeEach(() => { slept = []; logs = []; calls.length = 0; tmdbCalls.length = 0; config = {}; respond = () => ({ streams: [] }); tmdbImpl = async () => ({ results: [] }); metaImpl = async () => null; });
 
 const SITE = "https://mg.homelabx.qzz.io";
 const link = (n) => `${SITE}/resolve/token${n}`;
@@ -141,6 +145,40 @@ test("a row that fails or has no posters is left out, the others are still shown
   const rows = await plugin.home();
   assert.ok(!rows.some((r) => r.id === "upcoming" || r.id === "top-movies"));
   assert.ok(rows.length >= 10);
+});
+
+/** Kino's limiter, as it is: a bucket of 20 that gives one call back every half second. */
+function limiter(now) {
+  let tokens = 20, last = now();
+  return () => { tokens = Math.min(20, tokens + (now() - last) / 500); last = now(); if (tokens >= 1) { tokens -= 1; return true; } return false; };
+}
+
+test("a Home asked twice at once is not left short: rows Kino's limit refused are asked again after a wait", async () => {
+  let clock = 0;
+  const take = limiter(() => clock);
+  kino.sleep = async (ms) => { slept.push(ms); clock += ms; };
+  tmdbImpl = async () => { if (!take()) throw Object.assign(new Error("limit"), { code: "rate_limited" }); return { results: titles(5), page: 1, total_pages: 3 }; };
+  try {
+    const [a, b] = await Promise.all([plugin.home(), plugin.home()]); // 30 calls against a bucket of 20
+    assert.equal(a.length, 15);
+    assert.equal(b.length, 15);
+    assert.ok(slept.length > 0, "it waited");
+    assert.ok(slept.every((ms) => ms <= 5000), "never past kino.sleep's 5 s");
+  } finally { kino.sleep = async (ms) => { slept.push(ms); }; }
+});
+
+test("the rows are asked in small batches, not all at once", async () => {
+  let inFlight = 0, peak = 0;
+  tmdbImpl = async () => { inFlight++; peak = Math.max(peak, inFlight); await new Promise((r) => setTimeout(r, 5)); inFlight--; return { results: titles(3) }; };
+  await plugin.home();
+  assert.ok(peak <= 5, "at most 5 at once, got " + peak);
+});
+
+test("a row that keeps failing is logged with its id and code, and the others are still shown", async () => {
+  tmdbImpl = async (path) => { if (path === "/tv/top_rated") throw Object.assign(new Error("x"), { code: "unavailable" }); return { results: titles(3) }; };
+  const rows = await plugin.home();
+  assert.ok(!rows.some((r) => r.id === "top-series") && rows.length === 14);
+  assert.ok(logs.some((l) => l.includes("home row top-series unavailable")), logs.join(" | "));
 });
 
 test("when no row can be loaded the person gets a readable error", async () => {

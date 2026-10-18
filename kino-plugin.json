@@ -1,7 +1,7 @@
 {
   "id": "deepflix",
   "name": "DeepFlix",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "apiVersion": 9,
   "entry": "plugin.js",
   "icon": "icon.png",

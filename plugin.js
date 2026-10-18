@@ -148,6 +148,22 @@ async function imdbFor(tmdbId, type) {
 
 const titlesOf = (query) => [query.q, query.originalTitle, ...(query.altTitles || [])].filter(Boolean);
 
+/**
+ * kino.tmdb, asking again after a short wait when Kino's limit is spent: a plugin gets 20 calls every 10 s on Kino's key and one
+ * comes back every half second, so a Home asked twice at once (the Home and the plugin's page) runs out and the rows that come last
+ * would be left off for good.
+ */
+async function tmdb(path, params) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await kino.tmdb(path, params);
+    } catch (e) {
+      if (!e || e.code !== "rate_limited" || attempt >= 3) throw e;
+      await kino.sleep(1200 * (attempt + 1));
+    }
+  }
+}
+
 // ---- home ----
 
 /**
@@ -176,16 +192,26 @@ const HOME_ROWS = [
 const DISCOVER = { sort_by: "popularity.desc", "vote_count.gte": 200 };
 
 async function homeRow(row) {
-  const res = await kino.tmdb(row.path, { ...(row.path.startsWith("/discover") ? DISCOVER : {}), ...(row.params || {}) });
+  const res = await tmdb(row.path, { ...(row.path.startsWith("/discover") ? DISCOVER : {}), ...(row.params || {}) });
   // a row of posters: what has none looks broken
   const items = (res?.results || []).filter((r) => r.poster_path).slice(0, 20).map((r) => itemFromTmdb(r, row.kind));
   return items.length ? { id: row.id, title: t(row.title), genre: row.genre, ref: row.ref, items } : null;
 }
 
+/** Rows asked this many at a time: 15 calls in one burst is most of a plugin's 20 per 10 s. */
+const HOME_BATCH = 5;
+
 export async function home() {
   // Every row on its own: one that fails or comes back empty is left out, the rest of the Home is still shown.
-  const settled = await Promise.allSettled(HOME_ROWS.map(homeRow));
-  const rows = settled.map((r) => (r.status === "fulfilled" ? r.value : null)).filter(Boolean);
+  const settled = [];
+  for (let i = 0; i < HOME_ROWS.length; i += HOME_BATCH) {
+    settled.push(...(await Promise.allSettled(HOME_ROWS.slice(i, i + HOME_BATCH).map(homeRow))));
+  }
+  const rows = [];
+  settled.forEach((r, i) => {
+    if (r.status === "fulfilled") { if (r.value) rows.push(r.value); }
+    else kino.log("[deepflix]", "home row", HOME_ROWS[i].id, (r.reason && r.reason.code) || "failed");
+  });
   if (!rows.length) throw kino.error("unavailable", "no home row could be loaded", { userMessage: t("unavailable") });
   return rows;
 }
@@ -197,18 +223,18 @@ export async function search(query) {
   const type = query.type;
 
   if (type === "series") {
-    const res = await kino.tmdb("/search/tv", { query: query.q });
+    const res = await tmdb("/search/tv", { query: query.q });
     return kino.rank.filterRelevant((res?.results || []).map((r) => itemFromTmdb(r, "tv")), titlesOf(query));
   }
   if (type === "movie") {
-    const res = await kino.tmdb("/search/movie", { query: query.q });
+    const res = await tmdb("/search/movie", { query: query.q });
     return kino.rank.filterRelevant((res?.results || []).map((r) => itemFromTmdb(r, "movie")), titlesOf(query));
   }
 
   // "any", and the kinds this plugin has nothing for (anime, music, podcast): both catalogs, ranked by how they match
   const [movies, tv] = await Promise.all([
-    kino.tmdb("/search/movie", { query: query.q }),
-    kino.tmdb("/search/tv", { query: query.q }),
+    tmdb("/search/movie", { query: query.q }),
+    tmdb("/search/tv", { query: query.q }),
   ]);
   const all = [
     ...(movies?.results || []).map((r) => itemFromTmdb(r, "movie")),
@@ -246,7 +272,7 @@ export async function browse(ref, cursor) {
     return { items: [] };
   }
 
-  const res = await kino.tmdb(path, params);
+  const res = await tmdb(path, params);
   const items = (res?.results || []).filter((r) => r.poster_path).map((r) => itemFromTmdb(r, kind));
   const next = res?.page < res?.total_pages ? String(page + 1) : undefined;
   return { items, next };
@@ -255,7 +281,7 @@ export async function browse(ref, cursor) {
 // ---- categories ----
 
 export async function categories() {
-  const [mg, tg] = await Promise.all([kino.tmdb("/genre/movie/list"), kino.tmdb("/genre/tv/list")]);
+  const [mg, tg] = await Promise.all([tmdb("/genre/movie/list"), tmdb("/genre/tv/list")]);
   const cats = [];
   for (const g of (mg?.genres || []).slice(0, 12)) cats.push({ id: "gm" + g.id, title: g.name, ref: "genre:movie:" + g.id });
   for (const g of (tg?.genres || []).slice(0, 8)) cats.push({ id: "gt" + g.id, title: g.name + " (series)", ref: "genre:tv:" + g.id });
