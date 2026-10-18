@@ -33,6 +33,7 @@ const STRINGS = {
     topSeries: "Series mejor valoradas",
     kids: "Para los niños",
     docs: "Documentales",
+    anime: "Anime",
     gAction: "Acción",
     gComedy: "Comedia",
     gSciFi: "Ciencia ficción",
@@ -54,6 +55,7 @@ const STRINGS = {
     topSeries: "Top rated series",
     kids: "For kids",
     docs: "Documentaries",
+    anime: "Anime",
     gAction: "Action",
     gComedy: "Comedy",
     gSciFi: "Science fiction",
@@ -167,6 +169,7 @@ const HOME_ROWS = [
   { id: "g-drama", title: "gDrama", genre: "peliculas", ref: "genre:movie:18", kind: "movie", path: "/discover/movie", params: { with_genres: 18 } },
   { id: "kids", title: "kids", genre: "infantil", ref: "genre:movie:10751", kind: "movie", path: "/discover/movie", params: { with_genres: 10751 } },
   { id: "docs", title: "docs", genre: "documentales", ref: "genre:movie:99", kind: "movie", path: "/discover/movie", params: { with_genres: 99 } },
+  { id: "anime", title: "anime", genre: "anime", ref: "anime:tv", kind: "tv", path: "/discover/tv", params: { with_genres: 16, with_origin_country: "JP" } },
 ];
 
 // A discover list sorted by popularity is full of titles nobody has voted on: ask for some votes.
@@ -230,6 +233,11 @@ export async function browse(ref, cursor) {
   } else if (parts[0] === "popular" && (parts[1] === "movie" || parts[1] === "tv")) {
     kind = parts[1];
     path = `/${kind}/popular`;
+  } else if (parts[0] === "anime" && parts[1] === "tv") {
+    // Japanese animation: TMDB has no anime flag, but animation from Japan is what the Home row means
+    kind = "tv";
+    path = "/discover/tv";
+    params = { ...DISCOVER, with_genres: 16, with_origin_country: "JP", page };
   } else if (parts[0] === "genre" && (parts[1] === "movie" || parts[1] === "tv") && /^\d+$/.test(parts[2] || "")) {
     kind = parts[1];
     path = `/discover/${kind}`;

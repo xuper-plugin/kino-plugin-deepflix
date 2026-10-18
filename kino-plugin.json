@@ -1,7 +1,7 @@
 {
   "id": "deepflix",
   "name": "DeepFlix",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "apiVersion": 9,
   "entry": "plugin.js",
   "icon": "icon.png",
@@ -17,7 +17,8 @@
     "home",
     "browse",
     "episodes",
-    "resolve"
+    "resolve",
+    "download"
   ],
   "categories": [
     "movies",

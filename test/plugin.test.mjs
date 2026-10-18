@@ -174,5 +174,5 @@ const HOME_PATHS = {
   "trending-movies": "/trending/movie/week", "now-playing": "/movie/now_playing", upcoming: "/movie/upcoming", "top-movies": "/movie/top_rated",
   "trending-series": "/trending/tv/week", "on-the-air": "/tv/on_the_air", "top-series": "/tv/top_rated",
   "g-action": "/discover/movie", "g-comedy": "/discover/movie", "g-scifi": "/discover/movie", "g-horror": "/discover/movie",
-  "g-drama": "/discover/movie", kids: "/discover/movie", docs: "/discover/movie",
+  "g-drama": "/discover/movie", kids: "/discover/movie", docs: "/discover/movie", anime: "/discover/tv",
 };
