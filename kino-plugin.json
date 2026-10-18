@@ -1,0 +1,53 @@
+{
+  "id": "deepflix",
+  "name": "DeepFlix",
+  "version": "1.0.0",
+  "apiVersion": 9,
+  "entry": "plugin.js",
+  "icon": "icon.png",
+  "description": "Películas y series en español latino, a través de DeepFlix.",
+  "author": "xuper-plugin",
+  "homepage": "https://github.com/xuper-plugin/kino-plugin-deepflix",
+  "hosts": [
+    "mg.homelabx.qzz.io"
+  ],
+  "streamHosts": "any",
+  "capabilities": [
+    "search",
+    "home",
+    "browse",
+    "episodes",
+    "resolve"
+  ],
+  "categories": [
+    "movies",
+    "series"
+  ],
+  "color": "#1565C0",
+  "theme": {
+    "accent": "#1565C0",
+    "onAccent": "#FFFFFF",
+    "background": "#070B12",
+    "surface": "#101826",
+    "highlight": "#90CAF9"
+  },
+  "telemetry": true,
+  "settings": [
+    {
+      "key": "cacheSection",
+      "label": "Caché",
+      "labelEn": "Cache",
+      "type": "section",
+      "hint": "Los IDs de IMDB se guardan para no pedirlos de nuevo.",
+      "hintEn": "IMDB ids are kept so they are not asked again."
+    },
+    {
+      "key": "clearCache",
+      "label": "Vaciar caché",
+      "labelEn": "Clear cache",
+      "type": "action",
+      "confirm": "¿Vaciar la caché de IDs?",
+      "confirmEn": "Clear the ID cache?"
+    }
+  ]
+}

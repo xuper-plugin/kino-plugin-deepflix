@@ -1,0 +1,4 @@
+.kino-cookies.json
+.kino-storage.json
+.DS_Store
+node_modules/
