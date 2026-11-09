@@ -12,6 +12,9 @@
 if (typeof kino.meta !== "function") throw kino.error("unavailable", "kino.meta not available");
 if (typeof kino.tmdb !== "function") throw kino.error("unavailable", "kino.tmdb not available");
 
+// Kino waits for every request a call left running before it delivers the call's answer; ask it to drop them once the call settles.
+globalThis.__kinoDropPendingFetches = true;
+
 const SITE = "https://mg.homelabx.qzz.io";
 const TMDB_IMG = "https://image.tmdb.org/t/p/";
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -201,19 +204,31 @@ async function homeRow(row) {
 /** Rows asked this many at a time: 15 calls in one burst is most of a plugin's 20 per 10 s. */
 const HOME_BATCH = 5;
 
+/** Kino cuts a Home at 20 s: past this the rows still waiting are left off and what loaded is shown. */
+const HOME_BUDGET_MS = 14000;
+
 export async function home() {
   // Every row on its own: one that fails or comes back empty is left out, the rest of the Home is still shown.
-  const settled = [];
-  for (let i = 0; i < HOME_ROWS.length; i += HOME_BATCH) {
-    settled.push(...(await Promise.allSettled(HOME_ROWS.slice(i, i + HOME_BATCH).map(homeRow))));
-  }
-  const rows = [];
-  settled.forEach((r, i) => {
-    if (r.status === "fulfilled") { if (r.value) rows.push(r.value); }
-    else kino.log("[deepflix]", "home row", HOME_ROWS[i].id, (r.reason && r.reason.code) || "failed");
-  });
-  if (!rows.length) throw kino.error("unavailable", "no home row could be loaded", { userMessage: t("unavailable") });
-  return rows;
+  // The batches run one after the other (Kino's TMDB limit), but never past the budget: a spent limit makes each row wait
+  // and ask again, and three batches of that used to run over Kino's 20 s and lose the whole Home.
+  const rows = new Array(HOME_ROWS.length).fill(null);
+  const end = Date.now() + HOME_BUDGET_MS;
+  let finished = false;
+  const chain = (async () => {
+    for (let i = 0; i < HOME_ROWS.length && Date.now() < end; i += HOME_BATCH) {
+      const slice = HOME_ROWS.slice(i, i + HOME_BATCH);
+      const settled = await Promise.allSettled(slice.map(homeRow));
+      settled.forEach((r, j) => {
+        if (r.status === "fulfilled") rows[i + j] = r.value;
+        else kino.log("[deepflix]", "home row", slice[j].id, (r.reason && r.reason.code) || "failed");
+      });
+    }
+    finished = true;
+  })();
+  while (!finished && Date.now() < end) await Promise.race([chain, kino.sleep(Math.min(250, Math.max(1, end - Date.now())))]);
+  const shown = rows.filter(Boolean);
+  if (!shown.length) throw kino.error("unavailable", "no home row could be loaded", { userMessage: t("unavailable") });
+  return shown;
 }
 
 // ---- search ----

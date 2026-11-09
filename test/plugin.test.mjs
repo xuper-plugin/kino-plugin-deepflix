@@ -170,7 +170,9 @@ test("a Home asked twice at once is not left short: rows Kino's limit refused ar
 test("the rows are asked in small batches, not all at once", async () => {
   let inFlight = 0, peak = 0;
   tmdbImpl = async () => { inFlight++; peak = Math.max(peak, inFlight); await new Promise((r) => setTimeout(r, 5)); inFlight--; return { results: titles(3) }; };
-  await plugin.home();
+  // a real timer, as kino.sleep is: an instant stub would starve the 5 ms request timers above
+  kino.sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  try { await plugin.home(); } finally { kino.sleep = async (ms) => { slept.push(ms); }; }
   assert.ok(peak <= 5, "at most 5 at once, got " + peak);
 });
 
